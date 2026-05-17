@@ -1,0 +1,8 @@
+librosa==0.10.2.post1
+scikit-learn==1.5.2
+matplotlib==3.9.2
+seaborn==0.13.2
+soundfile==0.12.1
+numpy==1.26.4
+tqdm==4.66.5
+jupyterlab==4.2.5

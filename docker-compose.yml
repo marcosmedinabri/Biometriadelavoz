@@ -1,0 +1,16 @@
+services:
+  biometria:
+    build: .
+    container_name: biometria-voz
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./:/workspace
+    shm_size: "8gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

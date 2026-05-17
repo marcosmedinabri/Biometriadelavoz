@@ -1,0 +1,7 @@
+reconocedorLocutor_TF/
+**/__pycache__/
+**/.ipynb_checkpoints/
+*.pyc
+resultados/
+*.keras
+
