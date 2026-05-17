@@ -1,3 +1,4 @@
+cache_dataset.npz
 reconocedorLocutor_TF/
 **/__pycache__/
 **/.ipynb_checkpoints/
