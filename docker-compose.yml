@@ -1,6 +1,7 @@
 services:
   biometria:
     build: .
+    user: "${UID}:${GID}"
     container_name: biometria-voz
     ports:
       - "8888:8888"

@@ -33,7 +33,7 @@ from pathlib import Path
 import numpy as np
 import librosa
 from sklearn.model_selection import train_test_split
-
+import augment
 
 # ─────────────────────────────────────────────────────────────────
 # CONFIGURACIÓN
@@ -335,6 +335,133 @@ def dividir_datos(X, y, cfg=None):
           f"val: {len(X_val)}  |  test: {len(X_test)}")
 
     return X_train, X_val, X_test, y_train, y_val, y_test
+
+def dividir_registros(registros, cfg=None):
+    """
+    Divide la LISTA DE REGISTROS en train / val / test (estratificado).
+
+    A diferencia de dividir_datos(), que parte los MFCC ya calculados,
+    esta función parte los registros (rutas de fichero + etiquetas).
+    Es lo que permite aplicar el aumento de datos: necesitamos saber
+    QUÉ ficheros de audio están en train para poder aumentarlos antes
+    de extraer sus MFCC.
+
+    Estratifica por locutor.
+
+    Args:
+        registros : salida de construir_indice()
+        cfg       : config; si None usa CONFIG
+
+    Returns:
+        reg_train, reg_val, reg_test : tres listas de registros
+    """
+    cfg = cfg or CONFIG
+
+    # Vector de etiquetas de locutor para estratificar
+    y_loc = [r["locutor"] for r in registros]
+
+    # Primer corte: separamos test
+    reg_resto, reg_test = train_test_split(
+        registros,
+        test_size=cfg["test_size"],
+        stratify=y_loc,
+        random_state=cfg["random_state"],
+    )
+
+    # Segundo corte: del resto, separamos validación
+    val_ratio = cfg["val_size"] / (1 - cfg["test_size"])
+    y_loc_resto = [r["locutor"] for r in reg_resto]
+    reg_train, reg_val = train_test_split(
+        reg_resto,
+        test_size=val_ratio,
+        stratify=y_loc_resto,
+        random_state=cfg["random_state"],
+    )
+
+    print(f"Registros divididos -> train: {len(reg_train)}  |  "
+          f"val: {len(reg_val)}  |  test: {len(reg_test)}")
+
+    return reg_train, reg_val, reg_test
+
+
+def construir_dataset_desde_registros(registros, mapas, cfg=None,
+                                      aumentar=False, n_aug=2,
+                                      verbose=True):
+    """
+    Construye los arrays (X, y_locutor, y_pin) a partir de una lista
+    de registros, usando MAPAS de etiquetas ya existentes.
+
+    Se diferencia de construir_dataset() en dos cosas:
+      - Recibe los mapas de etiquetas desde fuera (en vez de crearlos),
+        para que train/val/test usen LA MISMA codificación.
+      - Puede aplicar aumento de datos (solo debe usarse en train).
+
+    Si aumentar=True, por cada audio original se generan 'n_aug' copias
+    aumentadas, que se añaden al conjunto con las MISMAS etiquetas que
+    el original (una variación del locutor 093 sigue siendo el 093).
+
+    Args:
+        registros : lista de registros (de dividir_registros)
+        mapas     : dict {"locutor":..., "pin":...} de construir_dataset
+        cfg       : config; si None usa CONFIG
+        aumentar  : si True, genera copias aumentadas
+        n_aug     : nº de copias aumentadas por audio original
+        verbose   : imprime progreso
+
+    Returns:
+        X, y_locutor, y_pin  (np.ndarray)
+    """
+    cfg = cfg or CONFIG
+    mapa_loc, mapa_pin = mapas["locutor"], mapas["pin"]
+    rng = np.random.default_rng(cfg["random_state"])
+
+    X, y_locutor, y_pin = [], [], []
+
+    for i, reg in enumerate(registros):
+        if verbose and i % 250 == 0:
+            print(f"  Procesando audio {i}/{len(registros)}...")
+
+        et_loc = mapa_loc[reg["locutor"]]
+        et_pin = mapa_pin[reg["pin"]]
+
+        # --- Audio original ---
+        audio = cargar_audio(reg["path"], cfg["sample_rate"], cfg["duration"])
+        X.append(extraer_mfcc(audio, cfg))
+        y_locutor.append(et_loc)
+        y_pin.append(et_pin)
+
+        # --- Copias aumentadas (solo si se pide) ---
+        if aumentar:
+            # cargamos el audio crudo (sin recortar) para aumentarlo
+            crudo, _ = librosa.load(reg["path"], sr=cfg["sample_rate"],
+                                    mono=True)
+            for _ in range(n_aug):
+                aug = augment.aumentar_audio(crudo, cfg["sample_rate"], rng=rng)
+                # re-ajustamos a longitud fija (el aumento pudo cambiarla)
+                objetivo = int(cfg["sample_rate"] * cfg["duration"])
+                if len(aug) < objetivo:
+                    aug = np.pad(aug, (0, objetivo - len(aug)))
+                else:
+                    ini = (len(aug) - objetivo) // 2
+                    aug = aug[ini:ini + objetivo]
+                # normalizar amplitud, igual que en cargar_audio
+                pico = np.max(np.abs(aug))
+                if pico > 0:
+                    aug = aug / pico
+
+                X.append(extraer_mfcc(aug, cfg))
+                y_locutor.append(et_loc)
+                y_pin.append(et_pin)
+
+    X = np.array(X, dtype=np.float32)[..., np.newaxis]
+    y_locutor = np.array(y_locutor, dtype=np.int64)
+    y_pin     = np.array(y_pin,     dtype=np.int64)
+
+    if verbose:
+        extra = f" (con aumento x{n_aug})" if aumentar else ""
+        print(f"  Construido: {X.shape}{extra}")
+
+    return X, y_locutor, y_pin
 
 
 # ─────────────────────────────────────────────────────────────────
