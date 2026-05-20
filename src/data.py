@@ -1,33 +1,27 @@
 """
-data.py — Carga y preparación de la base de datos PIN_16kHz
-============================================================
+data.py — Carga y preparación de la base de datos TextDependentSpeakerIdentification
+====================================================================================
 
 Verificación de locutor de texto dependiente — Biometría de la Voz.
 
-Este módulo recorre la base de datos del profesor (reconocedorLocutor_TF/
-PIN_16kHz), extrae características acústicas de cada audio y devuelve los
-datos listos para entrenar las dos redes:
+Este módulo recorre la base de datos (TextDependentSpeakerIdentification/),
+extrae características acústicas (MFCC) de cada audio y devuelve los datos
+listos para entrenar las DOS redes del proyecto:
 
-  - Red 1: identificación de LOCUTOR  (24 clases)
-  - Red 2: verificación de PIN/FRASE  (40 clases)
+  - Red 1: identificación de LOCUTOR  (~816 clases, una por locutor)
+  - Red 2: verificación de FRASE       (5 clases: S1, S2, S3, S4, S5)
 
 Estructura de la base de datos:
-    PIN_16kHz/
-      <locutor>/                  ej: 093, 147, a77, b48 ...
-        <locutor>_pin(XXXX)_cN.wav        PIN normal
-        <locutor>_pin(XXXX)M_cN.wav       PIN de familia (M = variante)
+    TextDependentSpeakerIdentification/
+      S1/  S2/  S3/  S4/  S5/             <- 5 carpetas, una por frase
+        spk_000001/  spk_000002/  ...      <- carpetas de locutor
+          trn_XXXXXX.wav                    <- audio (16 kHz, mono)
 
-Decisiones tomadas en la Fase 3 (exploración), todas justificadas:
-  - duration = 2.0 s  -> cubre el percentil 95 (1.95 s) sin recortar y
-                         sin rellenar con silencio innecesario.
-  - Audios "(def)"    -> EXCLUIDOS del entrenamiento; se reservan para
-                         las pruebas de robustez.
-  - Etiqueta de PIN   -> contenido del paréntesis + dígito de variante.
-                         "pin(3920)0" y "pin(3920)1" son PINs DISTINTOS.
-  - Errata "3290"     -> se reasigna a "3920" (dígitos transpuestos).
+Cada audio pertenece a un par (locutor, frase). El campo "pin" del registro
+contiene el nombre de la carpeta S (ej. "S1", "S2") porque así lo espera
+el resto del módulo; no guarda relación con un PIN numérico.
 """
 
-import re
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +35,7 @@ import augment
 
 CONFIG = {
     # Ruta a la base de datos (relativa a la raíz del proyecto)
-    "data_dir":     "reconocedorLocutor_TF/PIN_16kHz",
+    "data_dir":     "TextDependentSpeakerIdentification",
 
     # Audio
     "sample_rate":  16000,   # Hz — la base de datos ya está a 16 kHz
@@ -64,45 +58,31 @@ CONFIG = {
 # 1. RECORRIDO DE LA BASE DE DATOS  ->  ÍNDICE DE FICHEROS
 # ─────────────────────────────────────────────────────────────────
 
-# Regex que captura el PIN:
-#   grupo 1 = contenido del paréntesis  ->  "3920"
-#   grupo 2 = dígito de variante opcional tras el ")" -> "0", "1", ... o ""
-_PIN_RE = re.compile(r"pin\(([^)]+)\)(\d*)")
-
-
-def _pin_de_nombre(nombre_fichero):
-    """
-    Extrae la etiqueta de PIN del nombre de un .wav.
-
-    "093_pin(0185)_c2.wav"   -> "0185"
-    "093_pin(3920)7_c1.wav"  -> "39207"
-    "785_pin(3290)0_c1.wav"  -> "39200"  (errata 3290 corregida)
-
-    Devuelve None si el nombre no encaja con el patrón esperado.
-    """
-    m = _PIN_RE.search(nombre_fichero)
-    if m is None:
-        return None
-    clave = m.group(1) + m.group(2)
-    # Corrección de la errata detectada en la Fase 3
-    clave = clave.replace("3290", "3920")
-    return clave
-
-
-def construir_indice(data_dir=None, incluir_def=False):
+def construir_indice(data_dir=None, max_locutores=None):
     """
     Recorre la base de datos y construye una lista de registros.
+
+    La base de datos tiene la estructura:
+        <raíz>/
+          S1/  S2/  S3/  S4/  S5/
+            spk_XXXXXX/
+              trn_XXXXXX.wav
 
     Cada registro es un dict:
         {"path": <ruta wav>, "locutor": <str>, "pin": <str>}
 
-    Las etiquetas se devuelven como STRINGS legibles (ej. "093", "0185").
-    La conversión a enteros 0..N-1 se hace después, en codificar_etiquetas().
+    "locutor" es el nombre de la carpeta (ej. "spk_000001").
+    "pin" contiene la frase (ej. "S1", "S2"), no un PIN numérico.
+
+    Las etiquetas se devuelven como STRINGS. La conversión a enteros
+    0..N-1 se hace después, en codificar_etiquetas().
 
     Args:
-        data_dir     : ruta a PIN_16kHz. Si None, usa CONFIG["data_dir"].
-        incluir_def  : si False (por defecto) descarta los audios "(def)".
-                       Poner True solo para las pruebas de robustez.
+        data_dir      : ruta raíz con las carpetas S1..S5.
+                        Si None, usa CONFIG["data_dir"].
+        max_locutores : int o None. Si se indica, limita el índice a los
+                        N primeros locutores (orden alfabético). Todos sus
+                        audios de todas las frases disponibles se incluyen.
 
     Returns:
         registros : list[dict]
@@ -114,42 +94,52 @@ def construir_indice(data_dir=None, incluir_def=False):
             f"¿Está descargada y en la ruta correcta?"
         )
 
-    locutores = sorted([d for d in raiz.iterdir() if d.is_dir()])
-    if not locutores:
-        raise ValueError(f"No hay subcarpetas de locutor en '{raiz}'.")
+    # Busca las carpetas de frase (S1, S2, ...)
+    carpetas_frase = sorted(
+        d for d in raiz.iterdir() if d.is_dir() and d.name.startswith("S")
+    )
+    if not carpetas_frase:
+        raise ValueError(
+            f"No hay carpetas de frase (S1..S5) en '{raiz}'."
+        )
 
+    # ── Pasar 1: recolectar todos los nombres de locutor ──
+    todos_locutores = set()
+    for cf in carpetas_frase:
+        for entrada in cf.iterdir():
+            if entrada.is_dir():
+                todos_locutores.add(entrada.name)
+
+    todos_locutores = sorted(todos_locutores)
+
+    if max_locutores is not None:
+        locutores_seleccionados = set(todos_locutores[:max_locutores])
+    else:
+        locutores_seleccionados = set(todos_locutores)
+
+    # ── Pasar 2: construir el índice solo para los seleccionados ──
     registros = []
-    n_def_descartados = 0
-    n_sin_pin = 0
-
-    for carpeta_loc in locutores:
-        locutor = carpeta_loc.name
-        for wav in sorted(carpeta_loc.glob("*.wav")):
-            es_def = "(def)" in wav.name
-
-            if es_def and not incluir_def:
-                n_def_descartados += 1
+    for cf in carpetas_frase:
+        frase = cf.name
+        for nombre_loc in sorted(locutores_seleccionados):
+            carpeta_loc = cf / nombre_loc
+            if not carpeta_loc.is_dir():
+                # El locutor no está en esta frase; se omite sin error
                 continue
+            for wav in sorted(carpeta_loc.glob("*.wav")):
+                registros.append({
+                    "path":    str(wav),
+                    "locutor": nombre_loc,
+                    "pin":     frase,
+                })
 
-            pin = _pin_de_nombre(wav.name)
-            if pin is None:
-                # Nombre inesperado: lo avisamos pero no rompemos
-                n_sin_pin += 1
-                continue
-
-            registros.append({
-                "path":    str(wav),
-                "locutor": locutor,
-                "pin":     pin,
-            })
-
+    # ── Resumen ──
+    n_loc = len(locutores_seleccionados)
     print(f"Índice construido: {len(registros)} audios")
-    print(f"  Locutores : {len(locutores)}")
-    print(f"  PINs      : {len(set(r['pin'] for r in registros))}")
-    if not incluir_def:
-        print(f"  Descartados (def): {n_def_descartados}")
-    if n_sin_pin:
-        print(f"  AVISO: {n_sin_pin} ficheros con nombre inesperado, omitidos")
+    print(f"  Locutores : {n_loc}")
+    print(f"  Frases    : {len(carpetas_frase)}")
+    if n_loc > 0:
+        print(f"  Audios/locutor: {len(registros) // n_loc} media")
 
     return registros
 
@@ -336,7 +326,7 @@ def dividir_datos(X, y, cfg=None):
 
     return X_train, X_val, X_test, y_train, y_val, y_test
 
-def dividir_registros(registros, cfg=None):
+def dividir_registros(registros, cfg=None, campo="locutor"):
     """
     Divide la LISTA DE REGISTROS en train / val / test (estratificado).
 
@@ -358,8 +348,7 @@ def dividir_registros(registros, cfg=None):
     cfg = cfg or CONFIG
 
     # Vector de etiquetas de locutor para estratificar
-    y_loc = [r["locutor"] for r in registros]
-
+    y_loc = [r[campo] for r in registros]
     # Primer corte: separamos test
     reg_resto, reg_test = train_test_split(
         registros,
@@ -370,7 +359,7 @@ def dividir_registros(registros, cfg=None):
 
     # Segundo corte: del resto, separamos validación
     val_ratio = cfg["val_size"] / (1 - cfg["test_size"])
-    y_loc_resto = [r["locutor"] for r in reg_resto]
+    y_loc_resto = [r[campo] for r in reg_resto]
     reg_train, reg_val = train_test_split(
         reg_resto,
         test_size=val_ratio,
