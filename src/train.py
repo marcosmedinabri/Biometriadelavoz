@@ -33,6 +33,7 @@ CONFIG_TRAIN = {
     "epochs":        60,
     "learning_rate": 1e-3,
     "patience":      10,        # épocas sin mejora antes de parar
+    "monitor":       "val_loss", # qué métrica vigilar (val_loss / val_accuracy)
     "results_dir":   "resultados",
 }
 
@@ -64,17 +65,25 @@ def entrenar(modelo, X_train, y_train, X_val, y_val, cfg=None,
     Returns:
         history : objeto History de Keras (curvas de entrenamiento)
     """
-    cfg = cfg or CONFIG_TRAIN
-
+   
     modelo.compile(
         optimizer=tf.keras.optimizers.Adam(cfg["learning_rate"]),
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy"],
     )
 
+
+
+   # ── Lógica del monitor ──
+   
+    # Para 'val_loss' queremos minimizar; para 'val_accuracy' maximizar.
+    monitor = cfg["monitor"]
+    modo    = "min" if "loss" in monitor else "max"
+
     lista_callbacks = [
         callbacks.EarlyStopping(
-            monitor="val_accuracy",
+            monitor=monitor,
+            mode=modo,
             patience=cfg["patience"],
             restore_best_weights=True,
             verbose=1,
@@ -85,7 +94,8 @@ def entrenar(modelo, X_train, y_train, X_val, y_val, cfg=None,
         lista_callbacks.append(
             callbacks.ModelCheckpoint(
                 ruta_modelo,
-                monitor="val_accuracy",
+                monitor=monitor,
+                mode=modo,
                 save_best_only=True,
                 verbose=0,
             )

@@ -58,7 +58,7 @@ CONFIG = {
 # 1. RECORRIDO DE LA BASE DE DATOS  ->  ÍNDICE DE FICHEROS
 # ─────────────────────────────────────────────────────────────────
 
-def construir_indice(data_dir=None, max_locutores=None):
+def construir_indice(data_dir=None, max_locutores=None, criterio="alfabetico"):
     """
     Recorre la base de datos y construye una lista de registros.
 
@@ -80,9 +80,15 @@ def construir_indice(data_dir=None, max_locutores=None):
     Args:
         data_dir      : ruta raíz con las carpetas S1..S5.
                         Si None, usa CONFIG["data_dir"].
-        max_locutores : int o None. Si se indica, limita el índice a los
-                        N primeros locutores (orden alfabético). Todos sus
-                        audios de todas las frases disponibles se incluyen.
+        max_locutores : int o None. Si se indica, limita el índice a N
+                        locutores. Si None, se incluyen todos.
+        criterio      : cómo elegir esos N locutores cuando max_locutores
+                        está fijado. Opciones:
+                          - "alfabetico"  : los N primeros por nombre.
+                          - "mas_audios"  : los N con MÁS audios totales
+                                            (suma de todas las frases).
+                            Recomendado: evita locutores con muy pocos
+                            audios que la red no puede aprender bien.
 
     Returns:
         registros : list[dict]
@@ -103,20 +109,36 @@ def construir_indice(data_dir=None, max_locutores=None):
             f"No hay carpetas de frase (S1..S5) en '{raiz}'."
         )
 
-    # ── Pasar 1: recolectar todos los nombres de locutor ──
-    todos_locutores = set()
+    # ── Pasar 1: contar audios por locutor ──
+    # Hacemos un recuento global porque el criterio "mas_audios" lo
+    # necesita; el coste extra es despreciable (solo enumera ficheros,
+    # no los abre).
+    audios_por_locutor = {}
     for cf in carpetas_frase:
         for entrada in cf.iterdir():
-            if entrada.is_dir():
-                todos_locutores.add(entrada.name)
+            if not entrada.is_dir():
+                continue
+            n = sum(1 for _ in entrada.glob("*.wav"))
+            audios_por_locutor[entrada.name] = (
+                audios_por_locutor.get(entrada.name, 0) + n
+            )
 
-    todos_locutores = sorted(todos_locutores)
-
-    if max_locutores is not None:
-        locutores_seleccionados = set(todos_locutores[:max_locutores])
+    # ── Selección de locutores según criterio ──
+    if max_locutores is None:
+        locutores_seleccionados = set(audios_por_locutor.keys())
+    elif criterio == "alfabetico":
+        orden = sorted(audios_por_locutor.keys())
+        locutores_seleccionados = set(orden[:max_locutores])
+    elif criterio == "mas_audios":
+        # Ordena por nº de audios DESCENDENTE; desempata por nombre.
+        orden = sorted(audios_por_locutor.items(),
+                       key=lambda x: (-x[1], x[0]))
+        locutores_seleccionados = {n for n, _ in orden[:max_locutores]}
     else:
-        locutores_seleccionados = set(todos_locutores)
-
+        raise ValueError(
+            f"criterio desconocido: '{criterio}'. "
+            f"Opciones válidas: 'alfabetico', 'mas_audios'."
+        )
     # ── Pasar 2: construir el índice solo para los seleccionados ──
     registros = []
     for cf in carpetas_frase:
