@@ -6,3 +6,4 @@ cache_dataset.npz
 resultados/
 *.keras
 
+.Trash-0/
