@@ -82,6 +82,9 @@ EER desglosado por tipo de impostor (mejor enfoque por caso):
 - **Notebook orquestador**: `orquestador.ipynb`. Incluye los comentarios
   paso a paso del pipeline y todas las figuras generadas.
 
+*Este trabajo ha hecho uso puntual de asistentes de IA durante las
+fases de desarrollo y documentación.*
+
 ## Licencia y uso
 
 Trabajo académico realizado para la asignatura de Biometría de la Voz
