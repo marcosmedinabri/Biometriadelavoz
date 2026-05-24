@@ -1,9 +1,28 @@
+# Base de datos (no se sube por tamaño)
 TextDependentSpeakerIdentification/
-cache_dataset.npz
-**/__pycache__/
-**/.ipynb_checkpoints/
-*.pyc
-resultados/
-*.keras
 
+# Caché del dataset (se regenera localmente)
+cache_dataset.npz
+
+# Modelos entrenados (pesados; se regeneran con el notebook)
+resultados/*.keras
+
+# Las figuras (.png) de resultados/ SÍ se conservan en el repo.
+
+# Python
+**/__pycache__/
+*.pyc
+*.pyo
+**/.ipynb_checkpoints/
+
+# Entornos virtuales
+.venv/
+.env
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Sistema
 .Trash-0/

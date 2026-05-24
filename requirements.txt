@@ -1,3 +1,10 @@
+# Las dependencias críticas (tensorflow, cuDNN, CUDA) se proveen
+# directamente desde la imagen base del contenedor Docker:
+#     tensorflow/tensorflow:2.17.0-gpu
+# Por eso no aparece tensorflow en este fichero. Si se ejecuta el
+# proyecto fuera de Docker, será necesario instalar también:
+#     tensorflow==2.17.0
+
 librosa==0.10.2.post1
 scikit-learn==1.5.2
 matplotlib==3.9.2
