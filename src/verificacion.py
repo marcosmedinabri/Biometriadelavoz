@@ -37,59 +37,95 @@ from tensorflow.keras import Model
 def generar_trials(y_locutor, y_pin, n_genuinos=2000, n_impostores=2000,
                    random_state=42):
     """
-    Genera una lista de trials para evaluar el sistema de verificación.
+    Genera una lista de trials para evaluar el sistema de verificación,
+    cubriendo los cuatro casos del enunciado.
 
     Cada trial es una tupla (i_audio, locutor_reclamado, frase_reclamada,
-    es_genuino):
+    es_genuino, tipo):
 
       - i_audio            : índice del audio en el conjunto de test.
       - locutor_reclamado  : etiqueta de locutor que se afirma.
       - frase_reclamada    : etiqueta de frase que se afirma.
       - es_genuino         : True si la afirmación es cierta.
+      - tipo               : etiqueta del caso ("a", "b", "c", "d") para
+                             análisis posterior.
 
     Tipos de trial:
-      - GENUINOS: el audio es del locutor reclamado y dice la frase
-        reclamada. Lo correcto es ACEPTAR.
-      - IMPOSTORES: el audio es de OTRO locutor pero diciendo la MISMA
-        frase reclamada. Es el impostor estándar (impostor de locutor con
-        frase correcta), el más exigente porque la frase coincide y
-        toda la decisión la lleva la Red 1.
+      - "a" GENUINO     : el locutor reclamado y la frase reclamada
+                          coinciden con la realidad del audio. ACEPTAR.
+      - "b" FRASE       : el locutor coincide, la frase NO. RECHAZAR.
+                          (Mide la Red 2: ¿detecta la frase incorrecta?)
+      - "c" LOCUTOR     : el locutor NO coincide, la frase SÍ. RECHAZAR.
+                          (Mide la Red 1: ¿detecta el impostor?)
+      - "d" AMBOS       : ni locutor ni frase coinciden. RECHAZAR.
+                          (Caso más fácil: ambas redes deberían rechazar.)
+
+    Los tres tipos de impostor se reparten uniformemente dentro del
+    presupuesto total n_impostores.
 
     Args:
         y_locutor    : etiquetas reales de locutor (test set)
         y_pin        : etiquetas reales de frase (test set)
-        n_genuinos   : número de trials genuinos a generar
-        n_impostores : número de trials impostores a generar
+        n_genuinos   : número de trials genuinos (tipo "a") a generar
+        n_impostores : número total de trials impostores (b + c + d)
         random_state : semilla para reproducibilidad
 
     Returns:
-        trials : lista de tuplas (i_audio, loc_reclamado, frase_reclamada, es_genuino)
+        trials : lista de tuplas (i_audio, loc, frase, es_genuino, tipo)
     """
     rng = np.random.default_rng(random_state)
     n = len(y_locutor)
+    locutores_unicos = np.unique(y_locutor)
+    frases_unicas    = np.unique(y_pin)
     trials = []
 
-    # ── Genuinos: para cada audio, reclamamos su locutor y frase reales
-    idx_disponibles = np.arange(n)
-    idx_genuinos = rng.choice(idx_disponibles, size=n_genuinos, replace=True)
-    for i in idx_genuinos:
-        trials.append((int(i), int(y_locutor[i]), int(y_pin[i]), True))
+    # ── Tipo "a" — GENUINOS (locutor correcto, frase correcta) ──
+    idx_a = rng.choice(np.arange(n), size=n_genuinos, replace=True)
+    for i in idx_a:
+        trials.append((int(i), int(y_locutor[i]), int(y_pin[i]),
+                       True, "a"))
 
-    # ── Impostores: para cada audio, reclamamos OTRO locutor con la
-    #    MISMA frase real del audio. Eso convierte el trial en una
-    #    afirmación falsa de identidad pero veraz en frase.
-    idx_impostores = rng.choice(idx_disponibles, size=n_impostores, replace=True)
-    locutores_unicos = np.unique(y_locutor)
-    for i in idx_impostores:
+    # ── Reparto del presupuesto de impostores entre b, c, d ──
+    n_b = n_impostores // 3
+    n_c = n_impostores // 3
+    n_d = n_impostores - n_b - n_c   # el resto va al tipo d
+
+    # ── Tipo "b" — Mismo locutor, frase incorrecta ──
+    idx_b = rng.choice(np.arange(n), size=n_b, replace=True)
+    for i in idx_b:
+        frase_real = int(y_pin[i])
+        frase_falsa = int(rng.choice(frases_unicas[frases_unicas != frase_real]))
+        trials.append((int(i), int(y_locutor[i]), frase_falsa,
+                       False, "b"))
+
+    # ── Tipo "c" — Otro locutor, frase correcta ──
+    idx_c = rng.choice(np.arange(n), size=n_c, replace=True)
+    for i in idx_c:
         loc_real = int(y_locutor[i])
-        # Elegimos un locutor distinto al real
         loc_falso = int(rng.choice(locutores_unicos[locutores_unicos != loc_real]))
-        trials.append((int(i), loc_falso, int(y_pin[i]), False))
+        trials.append((int(i), loc_falso, int(y_pin[i]),
+                       False, "c"))
+
+    # ── Tipo "d" — Otro locutor, frase incorrecta ──
+    idx_d = rng.choice(np.arange(n), size=n_d, replace=True)
+    for i in idx_d:
+        loc_real    = int(y_locutor[i])
+        frase_real  = int(y_pin[i])
+        loc_falso   = int(rng.choice(locutores_unicos[locutores_unicos != loc_real]))
+        frase_falsa = int(rng.choice(frases_unicas[frases_unicas != frase_real]))
+        trials.append((int(i), loc_falso, frase_falsa,
+                       False, "d"))
 
     rng.shuffle(trials)
+
+    # ── Resumen ──
+    from collections import Counter
+    cuentas = Counter(t[4] for t in trials)
     print(f"Trials generados: {len(trials)} total")
-    print(f"  Genuinos   : {sum(1 for t in trials if t[3])}")
-    print(f"  Impostores : {sum(1 for t in trials if not t[3])}")
+    print(f"  (a) Genuino                       : {cuentas['a']}")
+    print(f"  (b) Mismo locutor, frase falsa    : {cuentas['b']}")
+    print(f"  (c) Otro locutor, frase correcta  : {cuentas['c']}")
+    print(f"  (d) Otro locutor, frase falsa     : {cuentas['d']}")
     return trials
 
 
@@ -126,7 +162,7 @@ def scores_probabilidades(red1, red2, X, trials):
     probs2 = red2.predict(X, verbose=0)   # (N, 5)
 
     scores, labels = [], []
-    for i, loc, frase, es_genuino in trials:
+    for i, loc, frase, es_genuino, tipo in trials:
         p_loc = probs1[i, loc]
         p_fr  = probs2[i, frase]
         scores.append(p_loc * p_fr)
@@ -226,7 +262,7 @@ def scores_embeddings(red1, red2, X, y_locutor_train, y_pin_train,
     emb2_test = extraer_embeddings(red2, X)
 
     scores, labels = [], []
-    for i, loc, frase, es_genuino in trials:
+    for i, loc, frase, es_genuino, tipo in trials:
         s_loc = coseno(emb1_test[i], cent_loc[loc])
         s_fr  = coseno(emb2_test[i], cent_pin[frase])
         # Coseno está en [-1, 1]; lo desplazamos a [0, 2] antes de
