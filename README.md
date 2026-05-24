@@ -88,6 +88,6 @@ fases de desarrollo y documentación.*
 ## Licencia y uso
 
 Trabajo académico realizado para la asignatura de Biometría de la Voz
-(Máster Universitario en Ingeniería de Telecomunicación, ETSIT-UPM). El
+(Grado en Ingeniería Informática, ETSII-UPM). El
 código se publica con fines de consulta. Los datos de voz son propiedad
 de sus autores originales y no se redistribuyen aquí.
