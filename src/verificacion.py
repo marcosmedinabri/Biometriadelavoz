@@ -148,7 +148,7 @@ def scores_probabilidades(red1, red2, X, trials):
     Args:
         red1, red2 : modelos entrenados
         X          : audios de test (N, 120, 63, 1)
-        trials     : lista de tuplas (i, loc, frase, es_genuino)
+        trials     : lista de tuplas (i, loc, frase, es_genuino, tipo)
 
     Returns:
         scores : np.ndarray (n_trials,) con el score de cada trial

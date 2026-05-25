@@ -5,7 +5,7 @@ biométrica que, dado un audio y una afirmación del tipo *"soy el locutor L
 diciendo la frase F"*, decide si la acepta o la rechaza.
 
 El sistema combina dos redes neuronales:
-- **Red 1**: identifica al locutor (50 clases, accuracy 72,21 %).
+- **Red 1**: identifica al locutor (50 clases, accuracy 69,83 %).
 - **Red 2**: identifica la frase pronunciada (5 clases S1–S5, accuracy 92,17 %).
 
 La verificación se resuelve fusionando las salidas de ambas redes mediante
@@ -63,7 +63,7 @@ entrenados en `resultados/` y los carga directamente.
 
 | Métrica | Valor |
 |--------|-------|
-| Red 1 — accuracy de test (50 locutores) | 72,21 % |
+| Red 1 — accuracy de test (50 locutores) | 69,83 % |
 | Red 2 — accuracy de test (5 frases)     | 92,17 % |
 | Verificación, fusión de probabilidades — EER | 5,55 % |
 | Verificación, embeddings + coseno — EER      | 5,35 % |

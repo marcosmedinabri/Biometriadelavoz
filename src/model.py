@@ -6,8 +6,8 @@ Verificación de locutor de texto dependiente — Biometría de la Voz.
 
 Este módulo define DOS arquitecturas, ambas genéricas (parametrizadas
 por el número de clases), de modo que sirven tanto para la Red 1
-(identificación de locutor, 24 clases) como para la Red 2
-(verificación de PIN, 40 clases):
+(identificación de locutor, 50 clases) como para la Red 2
+(verificación de frase, 5 clases):
 
   1) construir_cnn()       — CNN 2-D pura.
   2) construir_cnn_lstm()  — CNN + BiLSTM + atención.
@@ -17,13 +17,14 @@ por el número de clases), de modo que sirven tanto para la Red 1
     timbre y los formantes, propiedades casi instantáneas del espectro.
     Una CNN las captura bien y, al ser más simple, sobreajusta menos
     (importante con ~110 audios por locutor). -> empezar con la CNN.
-  - Red 2 (PIN/FRASE): una frase es una secuencia ORDENADA de fonemas
+  - Red 2 (FRASE): una frase es una secuencia ORDENADA de fonemas
     en el tiempo. La parte LSTM + atención modela esa evolución
     temporal. -> la CNN-LSTM encaja especialmente aquí.
 
-La capa de embedding (ver 'return_embedding') expone un vector de
-características por audio, útil para la Fase 7 (verificación con
-similitud coseno) además del enfoque por probabilidad softmax.
+El modelo expone una capa con name='embedding' (Dense de 128
+unidades) para poder extraerla posteriormente en la fase de
+verificación mediante get_layer('embedding'), útil tanto para el
+enfoque por probabilidad softmax como para similitud coseno.
 
 Adaptado de los scripts de referencia del profesor
 (reconocedorLocutor.py y reconocedorLocutor2.py).
@@ -65,7 +66,7 @@ def construir_cnn(input_shape, n_clases, cfg=None, nombre="CNN"):
 
     Args:
         input_shape : forma de entrada (n_caract, T, 1)
-        n_clases    : nº de clases de salida (24 locutores / 40 PINs)
+        n_clases    : nº de clases de salida (50 locutores / 5 frases)
         cfg         : dict de hiperparámetros; si None usa CONFIG_MODELO
         nombre      : nombre del modelo
 
@@ -261,8 +262,8 @@ if __name__ == "__main__":
     forma_ejemplo = (120, 63, 1)
 
     for arq in ["cnn", "cnn_lstm"]:
-        print(f"\n--- Arquitectura: {arq} (24 clases) ---")
-        modelo = construir_modelo(arq, forma_ejemplo, n_clases=24)
+        print(f"\n--- Arquitectura: {arq} (50 clases) ---")
+        modelo = construir_modelo(arq, forma_ejemplo, n_clases=50)
         modelo.summary()
 
     print("\nOK: el módulo funciona correctamente.")

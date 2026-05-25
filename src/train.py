@@ -5,7 +5,7 @@ train.py — Entrenamiento y evaluación de las redes
 Verificación de locutor de texto dependiente — Biometría de la Voz.
 
 Funciones GENÉRICAS de entrenamiento: sirven igual para la Red 1
-(locutor) y la Red 2 (PIN). Lo único que cambia entre una y otra es
+(locutor) y la Red 2 (frase). Lo único que cambia entre una y otra es
 el número de clases y el vector de etiquetas; el proceso es idéntico.
 
 Incluye:
@@ -50,9 +50,9 @@ def entrenar(modelo, X_train, y_train, X_val, y_val, cfg=None,
     - Pérdida: sparse_categorical_crossentropy (etiquetas son enteros,
       no one-hot).
     - Optimizador: Adam.
-    - EarlyStopping sobre val_accuracy: para cuando la red deja de
-      mejorar en validación, y restaura los mejores pesos. Evita
-      desperdiciar épocas y mitiga el sobreajuste.
+    - EarlyStopping configurable mediante cfg['monitor'] (por defecto
+      val_loss). Restaura los mejores pesos. Evita desperdiciar épocas
+      y mitiga el sobreajuste.
     - ModelCheckpoint: guarda en disco la mejor versión del modelo.
 
     Args:
@@ -132,7 +132,8 @@ def evaluar(modelo, X_test, y_test, nombres_clases=None):
                          (opcional, p.ej. los nombres de locutor)
 
     Returns:
-        dict con accuracy, pérdida, y_pred y la matriz de confusión
+        dict con accuracy, pérdida, y_test, y_pred, matriz de
+        confusión e informe de clasificación
     """
     perdida, acc = modelo.evaluate(X_test, y_test, verbose=0)
     y_pred = np.argmax(modelo.predict(X_test, verbose=0), axis=1)
@@ -239,6 +240,6 @@ def graficar_matriz_confusion(resultados, nombres_clases=None,
     plt.show()
 
 
-# Nota: con 40 clases (Red 2) las anotaciones numéricas dentro de la
-# matriz se ven apretadas; por eso 'annot' se desactiva si hay más de
-# 25 clases. La diagonal sigue leyéndose bien por color.
+# Nota: con muchas clases las anotaciones numéricas dentro de la matriz
+# se ven apretadas; por eso 'annot' se desactiva si hay más de 25
+# clases. La diagonal sigue leyéndose bien por color.

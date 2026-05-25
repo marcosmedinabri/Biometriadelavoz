@@ -312,10 +312,8 @@ def dividir_datos(X, y, cfg=None):
     Divide en train / val / test de forma ESTRATIFICADA.
 
     Estratificado = cada clase aparece en los tres subconjuntos en la
-    misma proporción. Es importante aquí porque las clases de PIN no
-    están equilibradas (los PINs normales tienen ~90 audios y las
-    variantes de familia ~45): sin estratificar, una clase pequeña
-    podría quedar fuera de validación o de test por azar.
+    misma proporción. Es importante para evitar que una clase con pocos
+    ejemplos quede fuera de validación o de test por azar.
 
     'y' debe ser el vector de etiquetas sobre el que estratificar:
     usa y_locutor para la Red 1 e y_pin para la Red 2.
@@ -363,6 +361,7 @@ def dividir_registros(registros, cfg=None, campo="locutor"):
     Args:
         registros : salida de construir_indice()
         cfg       : config; si None usa CONFIG
+        campo     : campo por el que estratificar ("locutor" o "pin")
 
     Returns:
         reg_train, reg_val, reg_test : tres listas de registros
