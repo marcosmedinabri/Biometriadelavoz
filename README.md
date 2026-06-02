@@ -1,93 +1,136 @@
-# Verificación de locutor de texto dependiente
+```
+O---o
+ O-o    ________        __    __                        
+  O    /  _____/_____ _/  |__/  |______    ____ _____   
+ o-O  /   \  ___\__  \\   __\   __\__  \ _/ ___\\__  \  
+o---O \    \_\  \/ __ \|  |  |  |  / __ \\  \___ / __ \_
+O---o  \______  (____  /__|  |__| (____  /\___  >____  /
+ O-o          \/     \/                \/     \/     \/
+  O
+ o-O       Text-Dependent Speaker Verification System
+o---O
+O---o
+ O-o
+  O
+ o-O
+o---O
+```
 
-Proyecto de la asignatura **Biometría de la Voz**. Sistema de verificación
-biométrica que, dado un audio y una afirmación del tipo *"soy el locutor L
-diciendo la frase F"*, decide si la acepta o la rechaza.
+> *”…there is no gene for the human spirit.”*
 
-El sistema combina dos redes neuronales:
-- **Red 1**: identifica al locutor (50 clases, accuracy 69,83 %).
-- **Red 2**: identifica la frase pronunciada (5 clases S1–S5, accuracy 92,17 %).
+Sistema de verificación biométrica de locutor dependiente de texto, desarrollado como proyecto de la asignatura **Biometría de la Voz**. Dado un audio y una afirmación del tipo *“soy el locutor L diciendo la frase F”*, el sistema decide si acepta o rechaza la identidad declarada.
 
-La verificación se resuelve fusionando las salidas de ambas redes mediante
-dos enfoques alternativos (producto de probabilidades softmax y similitud
-coseno sobre embeddings), alcanzando un **EER del 5,35 %** en el mejor caso.
+-----
 
-## Autores
+## ¿Cómo funciona?
 
-- Alberto Buceta Coroba
-- Marcos Medina Brihuega
-- Carlos Sainz Sueiro
+El sistema combina dos redes neuronales especializadas cuyas salidas se fusionan para tomar la decisión de verificación:
 
-## Estructura del proyecto
+|Red      |Tarea                    |Clases          |Accuracy (test)|
+|---------|-------------------------|----------------|---------------|
+|**Red 1**|Identificación de locutor|50 locutores    |**69,83 %**    |
+|**Red 2**|Identificación de frase  |5 frases (S1–S5)|**92,17 %**    |
+
+La fusión se realiza mediante dos enfoques alternativos:
+
+- **Producto de probabilidades softmax** — fusión a nivel de puntuación
+- **Similitud coseno sobre embeddings** — fusión a nivel de representación
+
+### Rendimiento de verificación (EER)
+
+|Configuración                     |EER       |
+|----------------------------------|----------|
+|Fusión de probabilidades          |5,55 %    |
+|Embeddings + coseno *(mejor caso)*|**5,35 %**|
+
+**EER desglosado por tipo de impostor** *(mejor enfoque por caso)*:
+
+|Caso|Descripción                                      |EER   |
+|----|-------------------------------------------------|------|
+|(b) |Mismo locutor, frase incorrecta — *mide Red 2*   |3,30 %|
+|(c) |Locutor distinto, frase correcta — *mide Red 1*  |6,03 %|
+|(d) |Locutor distinto, frase incorrecta — *caso fácil*|0,87 %|
+
+-----
+
+## Estructura del repositorio
 
 ```
-.
-├── orquestador.ipynb         Notebook principal (todo el pipeline)
+gattaca/
+├── orquestador.ipynb              Notebook principal — pipeline completo
 ├── src/
-│   ├── data.py               Carga de audio, MFCC, splits train/val/test
-│   ├── augment.py            Aumento de datos para la Red 1
-│   ├── model.py              Arquitecturas CNN y CNN-LSTM (parametrizables)
-│   ├── train.py              Entrenamiento y evaluación genéricos
-│   └── verificacion.py       Trials, scores, EER, curva DET
-├── resultados/               Modelos .keras y figuras generadas
-├── requirements.txt          Dependencias Python
-├── Dockerfile                Imagen del entorno
-└── docker-compose.yml        Orquestación del contenedor
+│   ├── data.py                    Carga de audio, extracción de MFCC, splits train/val/test
+│   ├── augment.py                 Aumento de datos (Red 1)
+│   ├── model.py                   Arquitecturas CNN y CNN-LSTM (parametrizables)
+│   ├── train.py                   Entrenamiento y evaluación genéricos
+│   └── verificacion.py            Generación de trials, scores, cálculo de EER y curva DET
+├── resultados/                    Modelos entrenados (.keras) y figuras generadas
+├── requirements.txt               Dependencias Python
+├── Dockerfile                     Imagen del entorno de ejecución
+└── docker-compose.yml             Orquestación del contenedor
 ```
 
-La base de datos `TextDependentSpeakerIdentification/` no se incluye en el
-repositorio (16 GB). Debe colocarse en la raíz del proyecto antes de
-ejecutar el notebook.
+> ⚠️ La base de datos `TextDependentSpeakerIdentification/` (~16 GB) **no se incluye** en el repositorio. Debe colocarse en la raíz del proyecto antes de ejecutar el notebook.
+
+-----
 
 ## Requisitos
 
-- Docker y Docker Compose instalados.
-- NVIDIA Container Toolkit (para acceso a GPU desde el contenedor).
-- GPU NVIDIA con soporte CUDA. Probado en RTX 3060 Laptop (6 GB).
+- **Docker** y **Docker Compose**
+- **NVIDIA Container Toolkit** — para acceso a GPU desde el contenedor
+- **GPU NVIDIA con soporte CUDA** — probado en RTX 3060 Laptop (6 GB VRAM)
 
-## Ejecución
+-----
 
-1. Colocar la base de datos `TextDependentSpeakerIdentification/` en la raíz.
-2. Levantar el contenedor:
-```bash
-   docker compose up
+## Puesta en marcha
+
+**1.** Coloca la base de datos en la raíz del proyecto:
+
 ```
-3. Abrir Jupyter Lab en `http://localhost:8888` y abrir `orquestador.ipynb`.
-4. *Kernel → Restart Kernel and Run All Cells*.
+gattaca/
+└── TextDependentSpeakerIdentification/
+```
 
-La primera ejecución completa tarda ~40 minutos (entrenamiento de las dos
-redes). Las siguientes son de 5 minutos: el notebook detecta los modelos
-entrenados en `resultados/` y los carga directamente.
+**2.** Levanta el contenedor:
 
-## Resultados principales
+```bash
+docker compose up
+```
 
-| Métrica | Valor |
-|--------|-------|
-| Red 1 — accuracy de test (50 locutores) | 69,83 % |
-| Red 2 — accuracy de test (5 frases)     | 92,17 % |
-| Verificación, fusión de probabilidades — EER | 5,55 % |
-| Verificación, embeddings + coseno — EER      | 5,35 % |
+**3.** Abre Jupyter Lab en `http://localhost:8888` y abre `orquestador.ipynb`.
 
-EER desglosado por tipo de impostor (mejor enfoque por caso):
+**4.** Ejecuta el pipeline completo:
 
-| Caso | Descripción | EER |
-|------|--------------|-----|
-| (b) | Mismo locutor + frase falsa  *(mide Red 2)*   | 3,30 % |
-| (c) | Otro locutor + frase correcta *(mide Red 1)* | 6,03 % |
-| (d) | Otro locutor + frase falsa *(caso fácil)*    | 0,87 % |
+```
+Kernel → Restart Kernel and Run All Cells
+```
+
+> 💡 **Primera ejecución:** ~40 minutos (entrena ambas redes desde cero).  
+> **Ejecuciones siguientes:** ~5 minutos — el notebook detecta los modelos en `resultados/` y los carga directamente.
+
+-----
 
 ## Documentación
 
-- **Memoria**: `memoria.docx` (entregable principal del proyecto).
-- **Notebook orquestador**: `orquestador.ipynb`. Incluye los comentarios
-  paso a paso del pipeline y todas las figuras generadas.
+- **Memoria del proyecto:** `memoria.docx` — entregable principal con descripción completa del sistema, experimentos y análisis de resultados.
+- **Notebook orquestador:** `orquestador.ipynb` — pipeline comentado paso a paso con todas las figuras generadas.
 
-*Este trabajo ha hecho uso puntual de asistentes de IA durante las
-fases de desarrollo y documentación.*
+-----
+
+## Autores
+
+|Nombre                |
+|----------------------|
+|Alberto Buceta Coroba |
+|Marcos Medina Brihuega|
+|Carlos Sainz Sueiro   |
+
+-----
 
 ## Licencia y uso
 
-Trabajo académico realizado para la asignatura de Biometría de la Voz
-(Grado en Ingeniería Informática, ETSII-UPM). El
-código se publica con fines de consulta. Los datos de voz son propiedad
-de sus autores originales y no se redistribuyen aquí.
+Trabajo académico realizado para la asignatura **Biometría de la Voz** — Grado en Ingeniería Informática, ETSII-UPM.
+
+El código se publica con fines de consulta y referencia académica. Los datos de voz son propiedad de sus autores originales y no se redistribuyen en este repositorio.
+
+*Este trabajo ha hecho uso puntual de asistentes de IA durante las fases de desarrollo y documentación.*
